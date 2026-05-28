@@ -1,10 +1,9 @@
-kind: ConfigMap
 apiVersion: v1
+kind: ConfigMap
 metadata:
   name: springappconfigmap
 data:
   username: springapp
-  password: mongodb@123
 
 ---
 apiVersion: v1
@@ -12,8 +11,8 @@ kind: Secret
 metadata:
   name: springappsecrets
 type: Opaque
-stringData:   # We can define multiple key value pairs.
-  password: devdb@123
+stringData:
+  password: devdb123
 
 ---
 apiVersion: v1
@@ -25,9 +24,10 @@ spec:
   capacity:
     storage: 1Gi
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   hostPath:
-    path: "/tmp/mongodata"
+    path: /tmp/mongodata
+
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -35,14 +35,15 @@ metadata:
   name: pvc-hostpath
 spec:
   storageClassName: manual
+  volumeName: pv-hostpath
   accessModes:
-  - ReadWriteOnce
+    - ReadWriteOnce
   resources:
     requests:
       storage: 100Mi
 
 ---
-## Spring Boot App
+# Spring Boot Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,90 +53,115 @@ spec:
   selector:
     matchLabels:
       app: springapp
+
   template:
     metadata:
-      name: springapppod
       labels:
         app: springapp
+
     spec:
+      imagePullSecrets:
+        - name: mysecretdocker
+
       containers:
-      - name: springappcontainer
-        image: <pls give your image location>
-        ports:
-        - containerPort: 8080
-        env:
-        - name: MONGO_DB_USERNAME
-          valueFrom:
-            configMapKeyRef:
-              name: springappconfigmap
-              key: username
-        - name: MONGO_DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: springappsecrets
-              key: password
-        - name: MONGO_DB_HOSTNAME
-          value: mongo
+        - name: springappcontainer
+          image: appajichowdary/springbootapp1:latest
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: MONGO_DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: springappconfigmap
+                  key: username
+
+            - name: MONGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: springappsecrets
+                  key: password
+
+            - name: MONGO_DB_HOSTNAME
+              value: mongo
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: springapp
 spec:
+  type: LoadBalancer
+
   selector:
     app: springapp
+
   ports:
-  - port: 80
-    targetPort: 8080
-  type: NodePort
+    - port: 80
+      targetPort: 8080
+
 ---
-# Mongo db pod with volumes(HostPath)
+# MongoDB Deployment
 apiVersion: apps/v1
-kind: ReplicaSet
+kind: Deployment
 metadata:
-  name: mongodbrs
+  name: mongodbdeployment
+
 spec:
+  replicas: 1
+
   selector:
     matchLabels:
       app: mongodb
+
   template:
-     metadata:
-       name: mongodbpod
-       labels:
-         app: mongodb
-     spec:
-       volumes:
-       - name: mongodb-pvc
-         persistentVolumeClaim:
-           claimName: pvc-hostpath
-       containers:
-       - name: mongodbcontainer
-         image: mongo
-         ports:
-         - containerPort: 27017
-         env:
-         - name: MONGO_INITDB_ROOT_USERNAME
-           valueFrom:
-             configMapKeyRef:
-               name: springappconfigmap
-               key: username
-         - name: MONGO_INITDB_ROOT_PASSWORD
-           valueFrom:
-             secretKeyRef:
-               name: springappsecrets
-               key: password
-         volumeMounts:
-         - name: mongodb-pvc
-           mountPath: /data/db
+    metadata:
+      labels:
+        app: mongodb
+
+    spec:
+      volumes:
+        - name: mongodb-pvc
+          persistentVolumeClaim:
+            claimName: pvc-hostpath
+
+      containers:
+        - name: mongodbcontainer
+          image: mongo
+
+          ports:
+            - containerPort: 27017
+
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: springappconfigmap
+                  key: username
+
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: springappsecrets
+                  key: password
+
+          volumeMounts:
+            - name: mongodb-pvc
+              mountPath: /data/db
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mongo
+
 spec:
   type: ClusterIP
+
   selector:
     app: mongodb
+
   ports:
-  - port: 27017
-    targetPort: 27017
+    - port: 27017
+      targetPort: 27017
