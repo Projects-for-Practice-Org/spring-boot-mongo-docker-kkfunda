@@ -128,7 +128,7 @@ spec:
 
       containers:
         - name: mongodbcontainer
-          image: mongo:latest
+          image: mongo:7.0.34
 
           ports:
             - containerPort: 27017
